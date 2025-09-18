@@ -221,7 +221,7 @@ class APNICParser:
             print(f"Generated checksum: {checksum_file}")
 
     def create_compressed_files(self):
-        """Create XZ compressed versions of IP range files"""
+        """Create XZ and GZ compressed versions of IP range files"""
         files = ['china_ipv4_ranges.txt', 'china_ipv6_ranges.txt']
 
         for filename in files:
@@ -236,14 +236,25 @@ class APNICParser:
                 os.remove(xz_file)
 
             try:
-                # Create XZ compressed file
+                # Create XZ compressed file with better compatibility
+                # -6: compression level 6 (default)
+                # -e: extreme mode for better compression
+                # -z: compress
+                # -k: keep original file
+                # -T0: use all CPU cores
                 result = subprocess.run(
-                    ['xz', '-zk', filepath],
+                    ['xz', '-6', '-z', '-k', '-T0', filepath],
                     capture_output=True,
                     text=True,
                     check=True
                 )
                 print(f"Created compressed file: {xz_file}")
+
+                # Show compression ratio
+                original_size = os.path.getsize(filepath)
+                compressed_size = os.path.getsize(xz_file)
+                ratio = (1 - compressed_size / original_size) * 100
+                print(f"  Compression: {original_size:,} → {compressed_size:,} bytes ({ratio:.1f}% reduction)")
 
                 # Generate checksum for compressed file
                 sha256 = hashlib.sha256()
@@ -262,6 +273,44 @@ class APNICParser:
             except subprocess.CalledProcessError as e:
                 print(f"Warning: Failed to compress {filename}: {e}")
                 print("Make sure 'xz' is installed (apt-get install xz-utils)")
+
+            # Also create gzip version for better compatibility
+            gz_file = f"{filepath}.gz"
+            try:
+                import gzip
+                import shutil
+
+                # Remove existing .gz file if it exists
+                if os.path.exists(gz_file):
+                    os.remove(gz_file)
+
+                # Create gzip compressed file
+                with open(filepath, 'rb') as f_in:
+                    with gzip.open(gz_file, 'wb', compresslevel=9) as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+
+                gz_size = os.path.getsize(gz_file)
+                orig_size = os.path.getsize(filepath)
+                ratio = (1 - gz_size / orig_size) * 100
+                print(f"Created gzip file: {gz_file}")
+                print(f"  Compression: {orig_size:,} → {gz_size:,} bytes ({ratio:.1f}% reduction)")
+
+                # Generate checksum for gzip file
+                sha256 = hashlib.sha256()
+                with open(gz_file, 'rb') as f:
+                    for chunk in iter(lambda: f.read(4096), b''):
+                        sha256.update(chunk)
+
+                checksum = sha256.hexdigest()
+
+                # Write checksum file for gzip version
+                checksum_file = f"{gz_file}.sha256sum"
+                with open(checksum_file, 'w') as f:
+                    f.write(f"{checksum}  {filename}.gz\n")
+                print(f"Generated gzip checksum: {checksum_file}")
+
+            except Exception as e:
+                print(f"Warning: Failed to create gzip for {filename}: {e}")
 
     def generate_statistics(self):
         """Generate statistics file"""
