@@ -30,14 +30,36 @@ class APNICParser:
         self.ipv6_ranges = []
 
     def download_apnic_data(self, output_file: str = 'apnic-data.txt') -> str:
-        """Download APNIC delegated statistics file with retry logic"""
+        """Download APNIC delegated statistics file (prefer curl for reliability)"""
         filepath = os.path.join(self.output_dir, output_file)
         print(f"Downloading APNIC data from {self.apnic_url}...")
 
+        # Try curl first (more reliable)
+        try:
+            print("Using curl to download...")
+            result = subprocess.run(
+                ['curl', '-L', '--progress-bar', '-o', filepath, self.apnic_url],
+                capture_output=False,  # Show progress bar
+                text=True,
+                timeout=120
+            )
+            if result.returncode == 0:
+                # Verify file exists and has content
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                    file_size = os.path.getsize(filepath)
+                    print(f"Successfully downloaded {file_size:,} bytes to {filepath}")
+                    return filepath
+                else:
+                    raise Exception("Downloaded file is empty or missing")
+        except FileNotFoundError:
+            print("curl not found, falling back to urllib...")
+        except Exception as e:
+            print(f"curl failed: {e}, falling back to urllib...")
+
+        # Fallback to urllib if curl fails
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Use urlopen with proper headers and timeout
                 request = urllib.request.Request(
                     self.apnic_url,
                     headers={
@@ -52,7 +74,7 @@ class APNICParser:
                         total_size = int(total_size)
                         print(f"File size: {total_size:,} bytes")
 
-                    # Read in chunks to handle large files
+                    # Read in chunks
                     chunk_size = 8192
                     downloaded = 0
                     data = b''
@@ -74,40 +96,21 @@ class APNICParser:
 
                     print(f"Successfully downloaded {downloaded:,} bytes to {filepath}")
 
-                    # Verify file size if we know the expected size
+                    # Verify file size
                     if total_size and downloaded != total_size:
                         raise Exception(f"Incomplete download: got {downloaded} bytes, expected {total_size}")
 
                     return filepath
 
             except Exception as e:
-                print(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
+                print(f"urllib attempt {attempt + 1}/{max_retries} failed: {e}")
                 if attempt < max_retries - 1:
                     import time
-                    wait_time = (attempt + 1) * 5  # Exponential backoff
+                    wait_time = (attempt + 1) * 5
                     print(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                 else:
-                    # Try alternative mirror
-                    print("\nTrying alternative download method...")
-                    try:
-                        # Use curl as fallback
-                        import subprocess
-                        result = subprocess.run(
-                            ['curl', '-L', '-o', filepath, self.apnic_url],
-                            capture_output=True,
-                            text=True,
-                            timeout=120
-                        )
-                        if result.returncode == 0:
-                            print(f"Downloaded using curl to {filepath}")
-                            return filepath
-                        else:
-                            print(f"Curl failed: {result.stderr}")
-                    except Exception as curl_error:
-                        print(f"Curl fallback failed: {curl_error}")
-
-                    print(f"\nError: Failed to download APNIC data after {max_retries} attempts")
+                    print(f"\nError: Failed to download APNIC data")
                     print("\nYou can manually download the file from:")
                     print(f"  {self.apnic_url}")
                     print(f"And save it as: {filepath}")

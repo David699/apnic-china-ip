@@ -1,0 +1,14 @@
+{
+  "generated_at": "2025-09-18T13:29:52.527880Z",
+  "ipv4": {
+    "total_ranges": 8690,
+    "first_range": "1.0.1.0/24",
+    "last_range": "223.255.252.0/23"
+  },
+  "ipv6": {
+    "total_ranges": 2038,
+    "first_range": "2001:250::/35",
+    "last_range": "240f:c000::/24"
+  },
+  "source": "https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest"
+}
