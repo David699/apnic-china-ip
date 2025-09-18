@@ -30,17 +30,89 @@ class APNICParser:
         self.ipv6_ranges = []
 
     def download_apnic_data(self, output_file: str = 'apnic-data.txt') -> str:
-        """Download APNIC delegated statistics file"""
+        """Download APNIC delegated statistics file with retry logic"""
         filepath = os.path.join(self.output_dir, output_file)
         print(f"Downloading APNIC data from {self.apnic_url}...")
 
-        try:
-            urllib.request.urlretrieve(self.apnic_url, filepath)
-            print(f"Downloaded to {filepath}")
-            return filepath
-        except Exception as e:
-            print(f"Error downloading APNIC data: {e}")
-            sys.exit(1)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Use urlopen with proper headers and timeout
+                request = urllib.request.Request(
+                    self.apnic_url,
+                    headers={
+                        'User-Agent': 'Mozilla/5.0 (compatible; APNIC-China-IP-Parser/1.0)',
+                        'Accept': 'text/plain'
+                    }
+                )
+
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    total_size = response.headers.get('Content-Length')
+                    if total_size:
+                        total_size = int(total_size)
+                        print(f"File size: {total_size:,} bytes")
+
+                    # Read in chunks to handle large files
+                    chunk_size = 8192
+                    downloaded = 0
+                    data = b''
+
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        data += chunk
+                        downloaded += len(chunk)
+
+                        if total_size and downloaded % (chunk_size * 100) == 0:
+                            progress = (downloaded / total_size) * 100
+                            print(f"Downloaded: {downloaded:,} / {total_size:,} bytes ({progress:.1f}%)")
+
+                    # Write the complete data
+                    with open(filepath, 'wb') as f:
+                        f.write(data)
+
+                    print(f"Successfully downloaded {downloaded:,} bytes to {filepath}")
+
+                    # Verify file size if we know the expected size
+                    if total_size and downloaded != total_size:
+                        raise Exception(f"Incomplete download: got {downloaded} bytes, expected {total_size}")
+
+                    return filepath
+
+            except Exception as e:
+                print(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    wait_time = (attempt + 1) * 5  # Exponential backoff
+                    print(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    # Try alternative mirror
+                    print("\nTrying alternative download method...")
+                    try:
+                        # Use curl as fallback
+                        import subprocess
+                        result = subprocess.run(
+                            ['curl', '-L', '-o', filepath, self.apnic_url],
+                            capture_output=True,
+                            text=True,
+                            timeout=120
+                        )
+                        if result.returncode == 0:
+                            print(f"Downloaded using curl to {filepath}")
+                            return filepath
+                        else:
+                            print(f"Curl failed: {result.stderr}")
+                    except Exception as curl_error:
+                        print(f"Curl fallback failed: {curl_error}")
+
+                    print(f"\nError: Failed to download APNIC data after {max_retries} attempts")
+                    print("\nYou can manually download the file from:")
+                    print(f"  {self.apnic_url}")
+                    print(f"And save it as: {filepath}")
+                    print("Then run the script with --skip-download flag")
+                    sys.exit(1)
 
     def parse_apnic_file(self, filepath: str):
         """Parse APNIC delegated statistics file for China IP ranges"""
