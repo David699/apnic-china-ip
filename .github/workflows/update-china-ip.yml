@@ -182,6 +182,10 @@ jobs:
         fi
 
         if [ "$should_release" = true ]; then
+          # Configure git user for Actions
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
           tag_name="ip-ranges-$(date '+%Y%m%d-%H%M%S')"
 
           # Create release notes
