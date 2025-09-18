@@ -185,22 +185,21 @@ jobs:
           tag_name="ip-ranges-$(date '+%Y%m%d-%H%M%S')"
 
           # Create release notes
-          cat > release_notes.md << EOF
-          # China IP Ranges Update - $(date '+%Y-%m-%d')
-
-          ## Files
-          - china_ipv4_ranges.txt - IPv4 CIDR ranges
-          - china_ipv6_ranges.txt - IPv6 CIDR ranges
-          - .sha256sum files - SHA256 checksums
-          - .xz files - Compressed versions
-
-          ## Statistics
-          - IPv4 ranges: $(wc -l < china_ipv4_ranges.txt)
-          - IPv6 ranges: $(wc -l < china_ipv6_ranges.txt)
-
-          ## Source
-          Data parsed from APNIC delegated statistics
-          EOF
+          echo "# China IP Ranges Update - $(date '+%Y-%m-%d')" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## Files" >> release_notes.md
+          echo "- china_ipv4_ranges.txt - IPv4 CIDR ranges" >> release_notes.md
+          echo "- china_ipv6_ranges.txt - IPv6 CIDR ranges" >> release_notes.md
+          echo "- .sha256sum files - SHA256 checksums" >> release_notes.md
+          echo "- .gz files - Gzip compressed versions" >> release_notes.md
+          echo "- .xz files - XZ compressed versions" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Statistics" >> release_notes.md
+          echo "- IPv4 ranges: $(wc -l < china_ipv4_ranges.txt)" >> release_notes.md
+          echo "- IPv6 ranges: $(wc -l < china_ipv6_ranges.txt)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Source" >> release_notes.md
+          echo "Data parsed from APNIC delegated statistics" >> release_notes.md
 
           # Create tag and release
           git tag -a "$tag_name" -m "China IP ranges update $(date '+%Y-%m-%d')"
