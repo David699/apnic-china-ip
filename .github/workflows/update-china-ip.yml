@@ -113,17 +113,23 @@ jobs:
         sha256sum china_ipv6_ranges.txt > china_ipv6_ranges.txt.sha256sum
         echo "Generated SHA256 checksums"
 
-    - name: Create XZ compressed files
+    - name: Create compressed files
       run: |
-        # Create compressed versions
+        # Create XZ compressed versions
         xz -zk china_ipv4_ranges.txt
         xz -zk china_ipv6_ranges.txt
+
+        # Create gzip compressed versions
+        gzip -9k china_ipv4_ranges.txt
+        gzip -9k china_ipv6_ranges.txt
 
         # Generate checksums for compressed files
         sha256sum china_ipv4_ranges.txt.xz > china_ipv4_ranges.txt.xz.sha256sum
         sha256sum china_ipv6_ranges.txt.xz > china_ipv6_ranges.txt.xz.sha256sum
+        sha256sum china_ipv4_ranges.txt.gz > china_ipv4_ranges.txt.gz.sha256sum
+        sha256sum china_ipv6_ranges.txt.gz > china_ipv6_ranges.txt.gz.sha256sum
 
-        echo "Created XZ compressed files and checksums"
+        echo "Created compressed files (XZ and GZ) with checksums"
 
     - name: Check for changes
       id: check_changes
@@ -132,6 +138,8 @@ jobs:
         git add china_ipv4_ranges.txt.sha256sum china_ipv6_ranges.txt.sha256sum
         git add china_ipv4_ranges.txt.xz china_ipv6_ranges.txt.xz
         git add china_ipv4_ranges.txt.xz.sha256sum china_ipv6_ranges.txt.xz.sha256sum
+        git add china_ipv4_ranges.txt.gz china_ipv6_ranges.txt.gz
+        git add china_ipv4_ranges.txt.gz.sha256sum china_ipv6_ranges.txt.gz.sha256sum
 
         if git diff --cached --quiet; then
           echo "No changes detected"
@@ -172,14 +180,38 @@ jobs:
         git commit -m "$commit_message"
         git push
 
-    - name: Create release (optional)
-      if: steps.check_changes.outputs.changes == 'true' && github.event_name == 'schedule'
+    - name: Create release
+      if: steps.check_changes.outputs.changes == 'true'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Create a tag for weekly releases (every Sunday)
-        if [ $(date +%u) -eq 7 ]; then
-          tag_name="ip-ranges-$(date '+%Y%m%d')"
+        # Create release for:
+        # 1. Manual runs (workflow_dispatch)
+        # 2. Weekly scheduled runs (every Sunday)
+        # 3. Push to main branch with 'release' in commit message
+
+        should_release=false
+
+        # Check if manual trigger
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "Manual trigger detected - will create release"
+          should_release=true
+        fi
+
+        # Check if it's Sunday for scheduled runs
+        if [ "${{ github.event_name }}" = "schedule" ] && [ $(date +%u) -eq 7 ]; then
+          echo "Sunday scheduled run - will create release"
+          should_release=true
+        fi
+
+        # Check if commit message contains 'release'
+        if [[ "${{ github.event.head_commit.message }}" == *"release"* ]]; then
+          echo "Commit message contains 'release' - will create release"
+          should_release=true
+        fi
+
+        if [ "$should_release" = true ]; then
+          tag_name="ip-ranges-$(date '+%Y%m%d-%H%M%S')"
 
           # Create release notes
           cat > release_notes.md << EOF
@@ -205,14 +237,22 @@ jobs:
 
           # Create GitHub release using GitHub CLI
           gh release create "$tag_name" \
-            --title "IP Ranges Update - $(date '+%Y-%m-%d')" \
+            --title "IP Ranges Update - $(date '+%Y-%m-%d %H:%M')" \
             --notes-file release_notes.md \
             china_ipv4_ranges.txt \
             china_ipv6_ranges.txt \
             china_ipv4_ranges.txt.sha256sum \
             china_ipv6_ranges.txt.sha256sum \
+            china_ipv4_ranges.txt.gz \
+            china_ipv4_ranges.txt.gz.sha256sum \
             china_ipv4_ranges.txt.xz \
-            china_ipv6_ranges.txt.xz \
             china_ipv4_ranges.txt.xz.sha256sum \
+            china_ipv6_ranges.txt.gz \
+            china_ipv6_ranges.txt.gz.sha256sum \
+            china_ipv6_ranges.txt.xz \
             china_ipv6_ranges.txt.xz.sha256sum
+
+          echo "✅ Release created: $tag_name"
+        else
+          echo "ℹ️ No release created (conditions not met)"
         fi
