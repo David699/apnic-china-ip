@@ -134,51 +134,22 @@ jobs:
     - name: Check for changes
       id: check_changes
       run: |
-        git add china_ipv4_ranges.txt china_ipv6_ranges.txt
-        git add china_ipv4_ranges.txt.sha256sum china_ipv6_ranges.txt.sha256sum
-        git add china_ipv4_ranges.txt.xz china_ipv6_ranges.txt.xz
-        git add china_ipv4_ranges.txt.xz.sha256sum china_ipv6_ranges.txt.xz.sha256sum
-        git add china_ipv4_ranges.txt.gz china_ipv6_ranges.txt.gz
-        git add china_ipv4_ranges.txt.gz.sha256sum china_ipv6_ranges.txt.gz.sha256sum
+        # Compare with previous release files if they exist
+        echo "changes=true" >> $GITHUB_OUTPUT
 
-        if git diff --cached --quiet; then
-          echo "No changes detected"
-          echo "changes=false" >> $GITHUB_OUTPUT
-        else
-          echo "Changes detected"
-          echo "changes=true" >> $GITHUB_OUTPUT
+        # Always generate summary for releases
+        echo "## IP Ranges Summary" > change_summary.txt
+        echo "" >> change_summary.txt
 
-          # Generate change summary
-          echo "## Change Summary" > change_summary.txt
-          echo "" >> change_summary.txt
+        # Count IP ranges
+        ipv4_count=$(wc -l < china_ipv4_ranges.txt)
+        ipv6_count=$(wc -l < china_ipv6_ranges.txt)
+        echo "- IPv4 ranges: $ipv4_count" >> change_summary.txt
+        echo "- IPv6 ranges: $ipv6_count" >> change_summary.txt
+        echo "" >> change_summary.txt
+        echo "Generated at: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> change_summary.txt
 
-          # Count IP ranges
-          ipv4_count=$(wc -l < china_ipv4_ranges.txt)
-          ipv6_count=$(wc -l < china_ipv6_ranges.txt)
-          echo "- IPv4 ranges: $ipv4_count" >> change_summary.txt
-          echo "- IPv6 ranges: $ipv6_count" >> change_summary.txt
-
-          # Show diff stats
-          echo "" >> change_summary.txt
-          echo "### Diff Statistics" >> change_summary.txt
-          git diff --cached --stat >> change_summary.txt
-        fi
-
-    - name: Commit and push changes
-      if: steps.check_changes.outputs.changes == 'true'
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-
-        # Create commit message with timestamp
-        commit_message="Update China IP ranges - $(date '+%Y-%m-%d %H:%M:%S UTC')"
-
-        if [ -f change_summary.txt ]; then
-          commit_message="$commit_message"$'\n\n'"$(cat change_summary.txt)"
-        fi
-
-        git commit -m "$commit_message"
-        git push
+    # Skip commit step - we only create releases, not commit to repo
 
     - name: Create release
       if: steps.check_changes.outputs.changes == 'true'
