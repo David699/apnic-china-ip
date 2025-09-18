@@ -1,0 +1,7 @@
+# Temporary files
+apnic-data.txt
+change_summary.txt
+release_notes.md
+*.pyc
+__pycache__/
+.DS_Store

@@ -1,0 +1,218 @@
+name: Update China IP Ranges
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC (10:00 Beijing Time)
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual trigger
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/update-china-ip.yml'
+
+jobs:
+  update-ip-ranges:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xz-utils curl
+
+    - name: Download APNIC data
+      run: |
+        curl -o apnic-data.txt https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest
+        echo "Downloaded APNIC data"
+
+    - name: Parse China IP ranges
+      run: |
+        python3 << 'EOF'
+        import re
+        import ipaddress
+
+        # Read APNIC data
+        with open('apnic-data.txt', 'r') as f:
+            lines = f.readlines()
+
+        ipv4_ranges = []
+        ipv6_ranges = []
+
+        # Parse lines
+        for line in lines:
+            # Skip comments and headers
+            if line.startswith('#') or '|CN|' not in line:
+                continue
+
+            parts = line.strip().split('|')
+            if len(parts) < 5:
+                continue
+
+            registry = parts[0]
+            country = parts[1]
+            ip_type = parts[2]
+            start = parts[3]
+            value = parts[4]
+
+            if country != 'CN':
+                continue
+
+            try:
+                if ip_type == 'ipv4':
+                    # Convert to CIDR notation
+                    count = int(value)
+                    # Calculate prefix length from count
+                    import math
+                    prefix_len = 32 - int(math.log2(count))
+                    cidr = f"{start}/{prefix_len}"
+                    # Validate the network
+                    network = ipaddress.IPv4Network(cidr, strict=False)
+                    ipv4_ranges.append(str(network))
+                elif ip_type == 'ipv6':
+                    # IPv6 value is already prefix length
+                    prefix_len = int(value)
+                    cidr = f"{start}/{prefix_len}"
+                    # Validate the network
+                    network = ipaddress.IPv6Network(cidr, strict=False)
+                    ipv6_ranges.append(str(network))
+            except Exception as e:
+                print(f"Error processing: {line.strip()}: {e}")
+                continue
+
+        # Sort ranges
+        ipv4_ranges.sort(key=lambda x: ipaddress.IPv4Network(x))
+        ipv6_ranges.sort(key=lambda x: ipaddress.IPv6Network(x))
+
+        # Write IPv4 ranges
+        with open('china_ipv4_ranges.txt', 'w') as f:
+            for cidr in ipv4_ranges:
+                f.write(f"{cidr}\n")
+        print(f"Wrote {len(ipv4_ranges)} IPv4 ranges")
+
+        # Write IPv6 ranges
+        with open('china_ipv6_ranges.txt', 'w') as f:
+            for cidr in ipv6_ranges:
+                f.write(f"{cidr}\n")
+        print(f"Wrote {len(ipv6_ranges)} IPv6 ranges")
+        EOF
+
+    - name: Generate SHA256 checksums
+      run: |
+        sha256sum china_ipv4_ranges.txt > china_ipv4_ranges.txt.sha256sum
+        sha256sum china_ipv6_ranges.txt > china_ipv6_ranges.txt.sha256sum
+        echo "Generated SHA256 checksums"
+
+    - name: Create XZ compressed files
+      run: |
+        # Create compressed versions
+        xz -zk china_ipv4_ranges.txt
+        xz -zk china_ipv6_ranges.txt
+
+        # Generate checksums for compressed files
+        sha256sum china_ipv4_ranges.txt.xz > china_ipv4_ranges.txt.xz.sha256sum
+        sha256sum china_ipv6_ranges.txt.xz > china_ipv6_ranges.txt.xz.sha256sum
+
+        echo "Created XZ compressed files and checksums"
+
+    - name: Check for changes
+      id: check_changes
+      run: |
+        git add china_ipv4_ranges.txt china_ipv6_ranges.txt
+        git add china_ipv4_ranges.txt.sha256sum china_ipv6_ranges.txt.sha256sum
+        git add china_ipv4_ranges.txt.xz china_ipv6_ranges.txt.xz
+        git add china_ipv4_ranges.txt.xz.sha256sum china_ipv6_ranges.txt.xz.sha256sum
+
+        if git diff --cached --quiet; then
+          echo "No changes detected"
+          echo "changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "Changes detected"
+          echo "changes=true" >> $GITHUB_OUTPUT
+
+          # Generate change summary
+          echo "## Change Summary" > change_summary.txt
+          echo "" >> change_summary.txt
+
+          # Count IP ranges
+          ipv4_count=$(wc -l < china_ipv4_ranges.txt)
+          ipv6_count=$(wc -l < china_ipv6_ranges.txt)
+          echo "- IPv4 ranges: $ipv4_count" >> change_summary.txt
+          echo "- IPv6 ranges: $ipv6_count" >> change_summary.txt
+
+          # Show diff stats
+          echo "" >> change_summary.txt
+          echo "### Diff Statistics" >> change_summary.txt
+          git diff --cached --stat >> change_summary.txt
+        fi
+
+    - name: Commit and push changes
+      if: steps.check_changes.outputs.changes == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+
+        # Create commit message with timestamp
+        commit_message="Update China IP ranges - $(date '+%Y-%m-%d %H:%M:%S UTC')"
+
+        if [ -f change_summary.txt ]; then
+          commit_message="$commit_message"$'\n\n'"$(cat change_summary.txt)"
+        fi
+
+        git commit -m "$commit_message"
+        git push
+
+    - name: Create release (optional)
+      if: steps.check_changes.outputs.changes == 'true' && github.event_name == 'schedule'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Create a tag for weekly releases (every Sunday)
+        if [ $(date +%u) -eq 7 ]; then
+          tag_name="ip-ranges-$(date '+%Y%m%d')"
+
+          # Create release notes
+          cat > release_notes.md << EOF
+          # China IP Ranges Update - $(date '+%Y-%m-%d')
+
+          ## Files
+          - china_ipv4_ranges.txt - IPv4 CIDR ranges
+          - china_ipv6_ranges.txt - IPv6 CIDR ranges
+          - .sha256sum files - SHA256 checksums
+          - .xz files - Compressed versions
+
+          ## Statistics
+          - IPv4 ranges: $(wc -l < china_ipv4_ranges.txt)
+          - IPv6 ranges: $(wc -l < china_ipv6_ranges.txt)
+
+          ## Source
+          Data parsed from APNIC delegated statistics
+          EOF
+
+          # Create tag and release
+          git tag -a "$tag_name" -m "China IP ranges update $(date '+%Y-%m-%d')"
+          git push origin "$tag_name"
+
+          # Create GitHub release using GitHub CLI
+          gh release create "$tag_name" \
+            --title "IP Ranges Update - $(date '+%Y-%m-%d')" \
+            --notes-file release_notes.md \
+            china_ipv4_ranges.txt \
+            china_ipv6_ranges.txt \
+            china_ipv4_ranges.txt.sha256sum \
+            china_ipv6_ranges.txt.sha256sum \
+            china_ipv4_ranges.txt.xz \
+            china_ipv6_ranges.txt.xz \
+            china_ipv4_ranges.txt.xz.sha256sum \
+            china_ipv6_ranges.txt.xz.sha256sum
+        fi
