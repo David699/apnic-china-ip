@@ -1,7 +1,19 @@
+# Generated data files (managed by GitHub Actions)
+china_ipv4_ranges.txt
+china_ipv6_ranges.txt
+*.sha256sum
+*.xz
+*.gz
+china_ip_stats.json
+
 # Temporary files
 apnic-data.txt
 change_summary.txt
 release_notes.md
+
+# Python
 *.pyc
 __pycache__/
+
+# System
 .DS_Store
