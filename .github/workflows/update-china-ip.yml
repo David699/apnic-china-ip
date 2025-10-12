@@ -113,19 +113,28 @@ jobs:
         sha256sum china_ipv6_ranges.txt > china_ipv6_ranges.txt.sha256sum
         echo "Generated SHA256 checksums"
 
+    - name: Compress to 1200 ranges
+      run: |
+        python3 compress_china_ip.py --input china_ipv4_ranges.txt --target 1200
+        sha256sum china_ipv4_ranges_1200.txt > china_ipv4_ranges_1200.txt.sha256sum
+        echo "Generated china_ipv4_ranges_1200.txt with checksum"
+
     - name: Create compressed files
       run: |
         # Create XZ compressed versions
         xz -zk china_ipv4_ranges.txt
         xz -zk china_ipv6_ranges.txt
+        xz -zk china_ipv4_ranges_1200.txt
 
         # Create gzip compressed versions
         gzip -9k china_ipv4_ranges.txt
         gzip -9k china_ipv6_ranges.txt
+        gzip -9k china_ipv4_ranges_1200.txt
 
         # Create zip compressed versions
         zip -9 china_ipv4_ranges.txt.zip china_ipv4_ranges.txt
         zip -9 china_ipv6_ranges.txt.zip china_ipv6_ranges.txt
+        zip -9 china_ipv4_ranges_1200.txt.zip china_ipv4_ranges_1200.txt
 
         # Generate checksums for compressed files
         sha256sum china_ipv4_ranges.txt.xz > china_ipv4_ranges.txt.xz.sha256sum
@@ -134,6 +143,9 @@ jobs:
         sha256sum china_ipv6_ranges.txt.gz > china_ipv6_ranges.txt.gz.sha256sum
         sha256sum china_ipv4_ranges.txt.zip > china_ipv4_ranges.txt.zip.sha256sum
         sha256sum china_ipv6_ranges.txt.zip > china_ipv6_ranges.txt.zip.sha256sum
+        sha256sum china_ipv4_ranges_1200.txt.xz > china_ipv4_ranges_1200.txt.xz.sha256sum
+        sha256sum china_ipv4_ranges_1200.txt.gz > china_ipv4_ranges_1200.txt.gz.sha256sum
+        sha256sum china_ipv4_ranges_1200.txt.zip > china_ipv4_ranges_1200.txt.zip.sha256sum
 
         echo "Created compressed files (XZ, GZ, and ZIP) with checksums"
 
@@ -150,7 +162,9 @@ jobs:
         # Count IP ranges
         ipv4_count=$(wc -l < china_ipv4_ranges.txt)
         ipv6_count=$(wc -l < china_ipv6_ranges.txt)
-        echo "- IPv4 ranges: $ipv4_count" >> change_summary.txt
+        ipv4_1200_count=$(wc -l < china_ipv4_ranges_1200.txt)
+        echo "- IPv4 ranges (full): $ipv4_count" >> change_summary.txt
+        echo "- IPv4 ranges (1200): $ipv4_1200_count" >> change_summary.txt
         echo "- IPv6 ranges: $ipv6_count" >> change_summary.txt
         echo "" >> change_summary.txt
         echo "Generated at: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> change_summary.txt
@@ -198,7 +212,8 @@ jobs:
           echo "# China IP Ranges Update - $(date '+%Y-%m-%d')" > release_notes.md
           echo "" >> release_notes.md
           echo "## Files" >> release_notes.md
-          echo "- china_ipv4_ranges.txt - IPv4 CIDR ranges" >> release_notes.md
+          echo "- china_ipv4_ranges.txt - IPv4 CIDR ranges (full list)" >> release_notes.md
+          echo "- china_ipv4_ranges_1200.txt - IPv4 CIDR ranges (compressed to 1200 ranges, ~94% coverage)" >> release_notes.md
           echo "- china_ipv6_ranges.txt - IPv6 CIDR ranges" >> release_notes.md
           echo "- .sha256sum files - SHA256 checksums" >> release_notes.md
           echo "- .gz files - Gzip compressed versions" >> release_notes.md
@@ -206,7 +221,8 @@ jobs:
           echo "- .zip files - ZIP compressed versions" >> release_notes.md
           echo "" >> release_notes.md
           echo "## Statistics" >> release_notes.md
-          echo "- IPv4 ranges: $(wc -l < china_ipv4_ranges.txt)" >> release_notes.md
+          echo "- IPv4 ranges (full): $(wc -l < china_ipv4_ranges.txt)" >> release_notes.md
+          echo "- IPv4 ranges (1200): $(wc -l < china_ipv4_ranges_1200.txt)" >> release_notes.md
           echo "- IPv6 ranges: $(wc -l < china_ipv6_ranges.txt)" >> release_notes.md
           echo "" >> release_notes.md
           echo "## Source" >> release_notes.md
@@ -221,8 +237,10 @@ jobs:
             --title "IP Ranges Update - $(date '+%Y-%m-%d %H:%M')" \
             --notes-file release_notes.md \
             china_ipv4_ranges.txt \
+            china_ipv4_ranges_1200.txt \
             china_ipv6_ranges.txt \
             china_ipv4_ranges.txt.sha256sum \
+            china_ipv4_ranges_1200.txt.sha256sum \
             china_ipv6_ranges.txt.sha256sum \
             china_ipv4_ranges.txt.gz \
             china_ipv4_ranges.txt.gz.sha256sum \
@@ -230,6 +248,12 @@ jobs:
             china_ipv4_ranges.txt.xz.sha256sum \
             china_ipv4_ranges.txt.zip \
             china_ipv4_ranges.txt.zip.sha256sum \
+            china_ipv4_ranges_1200.txt.gz \
+            china_ipv4_ranges_1200.txt.gz.sha256sum \
+            china_ipv4_ranges_1200.txt.xz \
+            china_ipv4_ranges_1200.txt.xz.sha256sum \
+            china_ipv4_ranges_1200.txt.zip \
+            china_ipv4_ranges_1200.txt.zip.sha256sum \
             china_ipv6_ranges.txt.gz \
             china_ipv6_ranges.txt.gz.sha256sum \
             china_ipv6_ranges.txt.xz \
