@@ -6,6 +6,8 @@
 
 - `china_ipv4_ranges.txt` - IPv4 地址段
 - `china_ipv6_ranges.txt` - IPv6 地址段
+- `china_ipv4_ranges_1200.txt`- 压缩的IPv4 地址段 1200个 准确率约%94
+- `test_accuracy.py` - 测试china_ipv4_ranges_1200准确率的
 - `*.sha256sum` - 校验和文件
 - `*.xz` - 压缩文件
 
